@@ -11,56 +11,79 @@ import Reports from "./pages/Reports";
 import Alerts from "./pages/Alerts";
 import Settings from "./pages/Settings";
 import DesignSystem from "./pages/DesignSystem";
+import UploadWizard from "./pages/UploadWizard";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <LandingPage />,
+    errorElement: <ErrorBoundary />,
   },
   {
     path: "/app",
     element: <RootLayout />,
+    errorElement: <ErrorBoundary />,
     children: [
       {
         index: true,
-        Component: Overview,
+        element: <Overview />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "today",
-        Component: TodayPlan,
+        element: <TodayPlan />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "fields",
-        Component: Fields,
+        element: <Fields />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "fields/:fieldId",
-        Component: FieldDetail,
+        element: <FieldDetail />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "tasks",
-        Component: Tasks,
+        element: <Tasks />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "imports",
-        Component: Imports,
+        element: <Imports />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: "upload",
+        element: <UploadWizard />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "reports",
-        Component: Reports,
+        element: <Reports />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "alerts",
-        Component: Alerts,
+        element: <Alerts />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "settings",
-        Component: Settings,
+        element: <Settings />,
+        errorElement: <ErrorBoundary />,
       },
       {
         path: "design-system",
-        Component: DesignSystem,
+        element: <DesignSystem />,
+        errorElement: <ErrorBoundary />,
       },
     ],
+  },
+  {
+    path: "*",
+    element: <ErrorBoundary />,
   },
 ]);

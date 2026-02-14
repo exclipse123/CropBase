@@ -1,510 +1,495 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Progress } from '../components/ui/progress';
-import { Switch } from '../components/ui/switch';
-import { Checkbox } from '../components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Separator } from '../components/ui/separator';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../components/ui/table';
-import {
-  Upload,
-  FileSpreadsheet,
-  Download,
-  CheckCircle2,
-  AlertCircle,
-  ArrowRight,
-  ArrowLeft,
-  CheckCheck
+  Upload, FileSpreadsheet, CheckCircle2, ArrowRight, ArrowLeft, Loader2,
+  X, Table2, Sparkles, LayoutDashboard, ListTodo, Calendar, ChevronRight,
+  AlertCircle, FileUp, Columns3, Wand2,
 } from 'lucide-react';
+import { useApp, generateId } from '../store/AppContext';
+import type { MappingTemplate } from '../store/AppContext';
+import { toast } from 'sonner';
 
-type Step = 'upload' | 'preview' | 'mapping' | 'success';
+// Simulated data that we "detect" from any uploaded file
+const SIMULATED_ROWS = [
+  { field: 'Field A', task: 'Check flood levels', category: 'irrigation', priority: 'high', dueDate: '2026-02-14' },
+  { field: 'Field B', task: 'Apply nitrogen fertilizer', category: 'fertilization', priority: 'high', dueDate: '2026-02-14' },
+  { field: 'Field C', task: 'Scout for aphids', category: 'scout', priority: 'medium', dueDate: '2026-02-14' },
+  { field: 'Field D', task: 'Cut hay - first pass', category: 'harvest', priority: 'critical', dueDate: '2026-02-12' },
+  { field: 'Field E', task: 'Inspect bloom health', category: 'scout', priority: 'medium', dueDate: '2026-02-14' },
+  { field: 'Field F', task: 'Adjust drip emitters', category: 'irrigation', priority: 'medium', dueDate: '2026-02-14' },
+  { field: 'Field C', task: 'Spray fungicide', category: 'spray', priority: 'high', dueDate: '2026-02-15' },
+  { field: 'Field D', task: 'Service pivot motor', category: 'maintenance', priority: 'medium', dueDate: '2026-02-18' },
+];
+
+const SIMULATED_COLUMNS = ['field', 'task', 'category', 'priority', 'dueDate', 'notes', 'assignee'];
+const CROPBASE_COLUMNS = ['Field Name', 'Task Title', 'Category', 'Priority', 'Due Date', 'Notes', 'Assignee'];
+
+type Step = 'upload' | 'preview' | 'mapping' | 'processing' | 'success';
 
 export default function UploadWizard() {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState<Step>('upload');
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [fileName, setFileName] = useState<string>('');
-  const [saveMappingTemplate, setSaveMappingTemplate] = useState(false);
+  const { state, dispatch } = useApp();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Mock data for preview
-  const previewData = [
-    { field: 'Field A', crop: 'Rice', stage: 'Heading', acres: '45', irrigation: 'Flood', task: 'Check flood levels', due: '2/14/2026' },
-    { field: 'Field B', crop: 'Corn', stage: 'Tasseling', acres: '32', irrigation: 'Drip', task: 'Apply nitrogen', due: '2/15/2026' },
-    { field: 'Field C', crop: 'Tomatoes', stage: 'Vegetative', acres: '18', irrigation: 'Overhead', task: 'Scout for pests', due: '2/16/2026' },
-  ];
+  const [step, setStep] = useState<Step>('upload');
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [parseProgress, setParseProgress] = useState(0);
+  const [mappings, setMappings] = useState<Record<string, string>>({
+    field: 'Field Name',
+    task: 'Task Title',
+    category: 'Category',
+    priority: 'Priority',
+    dueDate: 'Due Date',
+    notes: 'Notes',
+    assignee: 'Assignee',
+  });
+  const [saveTemplate, setSaveTemplate] = useState(true);
+  const [importResult, setImportResult] = useState({ tasks: 0, fields: 0 });
 
-  const detectedColumns = ['field', 'crop', 'stage', 'acres', 'irrigation', 'task', 'due', 'notes'];
+  // ── Drag & Drop handlers ─────────────────────────────────────
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  }, []);
 
-  const warnings = [
-    'Column "last_action" is empty and will be skipped',
-    '2 rows have invalid date formats in "due" column',
-  ];
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) acceptFile(dropped);
+  }, []);
+
+  const acceptFile = (f: File) => {
+    setFile(f);
+    // Simulate "parsing" animation then move to preview
+    setStep('preview');
+    setParseProgress(0);
+    let p = 0;
+    const interval = setInterval(() => {
+      p += Math.random() * 25 + 10;
+      if (p >= 100) {
+        p = 100;
+        clearInterval(interval);
+      }
+      setParseProgress(Math.min(p, 100));
+    }, 200);
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
-      // Simulate upload progress
-      let progress = 0;
-      const interval = setInterval(() => {
-        progress += 10;
-        setUploadProgress(progress);
-        if (progress >= 100) {
-          clearInterval(interval);
-          setTimeout(() => setCurrentStep('preview'), 300);
+    const selected = e.target.files?.[0];
+    if (selected) acceptFile(selected);
+  };
+
+  // ── Process / Import (simulated) ─────────────────────────────
+  const handleImport = () => {
+    setStep('processing');
+    setParseProgress(0);
+    let p = 0;
+    const interval = setInterval(() => {
+      p += Math.random() * 15 + 5;
+      if (p >= 100) {
+        p = 100;
+        clearInterval(interval);
+        // Create simulated tasks
+        const fieldMap: Record<string, string> = {};
+        state.fields.forEach(f => { fieldMap[f.name] = f.id; });
+        const newTasks = SIMULATED_ROWS.map(row => ({
+          id: generateId('task'),
+          title: row.task,
+          fieldId: fieldMap[row.field] || 'field-a',
+          field: row.field,
+          category: row.category as any,
+          dueDate: row.dueDate,
+          status: 'todo' as const,
+          priority: row.priority as any,
+          overdue: false,
+          blocked: false,
+          createdFrom: file?.name || 'upload',
+        }));
+
+        newTasks.forEach(t => dispatch({ type: 'TASK_CREATE', payload: t }));
+
+        // Add import record
+        dispatch({
+          type: 'IMPORT_ADD',
+          payload: {
+            id: generateId('import'),
+            fileName: file?.name || 'uploaded-file.csv',
+            uploadedTime: new Date().toISOString(),
+            rowsParsed: SIMULATED_ROWS.length + Math.floor(Math.random() * 10),
+            fieldsDetected: new Set(SIMULATED_ROWS.map(r => r.field)).size,
+            tasksCreated: newTasks.length,
+            status: 'success',
+          },
+        });
+
+        // Add change log entry
+        dispatch({
+          type: 'CHANGE_ADD',
+          payload: {
+            id: generateId('change'),
+            type: 'imported',
+            description: `Imported ${newTasks.length} tasks from ${file?.name || 'spreadsheet'}`,
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        dispatch({ type: 'UPDATE_LAST_IMPORT_TIME', payload: new Date().toISOString() });
+
+        // Save mapping template if opted in
+        if (saveTemplate) {
+          const template: MappingTemplate = {
+            id: generateId('template'),
+            name: `${file?.name || 'Upload'} template`,
+            created: new Date().toISOString().split('T')[0],
+            lastUsed: new Date().toISOString().split('T')[0],
+            source: file?.name,
+            columns: SIMULATED_COLUMNS,
+          };
+          dispatch({ type: 'MAPPING_TEMPLATE_ADD', payload: template });
         }
-      }, 100);
-    }
+
+        setImportResult({ tasks: newTasks.length, fields: new Set(SIMULATED_ROWS.map(r => r.field)).size });
+        setStep('success');
+        toast.success(`Successfully imported ${newTasks.length} tasks!`);
+      }
+      setParseProgress(Math.min(p, 100));
+    }, 250);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files[0];
-    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.csv'))) {
-      setFileName(file.name);
-      setCurrentStep('preview');
-    }
-  };
-
-  const getStepNumber = (step: Step) => {
-    switch (step) {
-      case 'upload': return 1;
-      case 'preview': return 2;
-      case 'mapping': return 3;
-      case 'success': return 4;
-    }
-  };
-
-  const currentStepNumber = getStepNumber(currentStep);
+  // ── Step indicator ───────────────────────────────────────────
+  const steps: { key: Step; label: string }[] = [
+    { key: 'upload', label: 'Upload' },
+    { key: 'preview', label: 'Preview' },
+    { key: 'mapping', label: 'Mapping' },
+    { key: 'success', label: 'Done' },
+  ];
+  const activeIdx = step === 'processing' ? 2.5 : steps.findIndex(s => s.key === step);
 
   return (
-    <div className="min-h-screen bg-neutral-50 p-4 lg:p-8">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-neutral-900">Upload Spreadsheet</h1>
-          <p className="text-sm text-neutral-600 mt-1">
-            Convert your Excel file into a live operational dashboard
-          </p>
+    <div className="pb-8">
+      {/* Header */}
+      <div className="sticky top-16 z-30 bg-white border-b border-neutral-200 px-4 lg:px-8 py-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Import Data</h1>
+            <p className="text-sm text-neutral-600 mt-1">Upload a spreadsheet to populate your dashboard</p>
+          </div>
+          {step !== 'success' && (
+            <Button variant="ghost" onClick={() => navigate('/app')}>
+              <X className="h-4 w-4 mr-2" /> Cancel
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="px-4 lg:px-8 max-w-3xl mx-auto">
+        {/* Step Progress */}
+        <div className="flex items-center justify-between mb-8">
+          {steps.map((s, i) => (
+            <div key={s.key} className="flex items-center">
+              <div className="flex flex-col items-center">
+                <div className={`h-9 w-9 rounded-full flex items-center justify-center text-sm font-semibold transition-colors ${
+                  i < activeIdx ? 'bg-green-600 text-white' :
+                  i === Math.floor(activeIdx) ? 'bg-green-600 text-white ring-4 ring-green-100' :
+                  'bg-neutral-100 text-neutral-400'
+                }`}>
+                  {i < activeIdx ? <CheckCircle2 className="h-5 w-5" /> : i + 1}
+                </div>
+                <span className={`text-xs mt-1.5 font-medium ${i <= activeIdx ? 'text-green-700' : 'text-neutral-400'}`}>{s.label}</span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`w-16 sm:w-24 h-0.5 mx-2 mt-[-18px] ${i < activeIdx ? 'bg-green-500' : 'bg-neutral-200'}`} />
+              )}
+            </div>
+          ))}
         </div>
 
-        {/* Progress Steps */}
-        {currentStep !== 'success' && (
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-2">
-              <div className={`flex items-center gap-2 ${currentStepNumber >= 1 ? 'text-neutral-900' : 'text-neutral-400'}`}>
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  currentStepNumber > 1 ? 'bg-green-600 text-white' : currentStepNumber === 1 ? 'bg-neutral-900 text-white' : 'bg-neutral-200'
-                }`}>
-                  {currentStepNumber > 1 ? <CheckCircle2 className="h-5 w-5" /> : '1'}
-                </div>
-                <span className="text-sm font-medium">Upload</span>
+        {/* ─── STEP: Upload ──────────────────────────────────── */}
+        {step === 'upload' && (
+          <div className="space-y-6">
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${
+                dragOver
+                  ? 'border-green-500 bg-green-50 scale-[1.01]'
+                  : 'border-neutral-300 hover:border-green-400 hover:bg-green-50/50'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.xlsx,.xls,.tsv,.json"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+              <div className="h-16 w-16 mx-auto rounded-2xl bg-green-50 flex items-center justify-center mb-4">
+                <FileUp className="h-8 w-8 text-green-600" />
               </div>
-              <div className="flex-1 mx-4 h-1 bg-neutral-200">
-                <div className={`h-full ${currentStepNumber > 1 ? 'bg-green-600' : 'bg-neutral-200'}`} />
-              </div>
-              <div className={`flex items-center gap-2 ${currentStepNumber >= 2 ? 'text-neutral-900' : 'text-neutral-400'}`}>
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  currentStepNumber > 2 ? 'bg-green-600 text-white' : currentStepNumber === 2 ? 'bg-neutral-900 text-white' : 'bg-neutral-200'
-                }`}>
-                  {currentStepNumber > 2 ? <CheckCircle2 className="h-5 w-5" /> : '2'}
-                </div>
-                <span className="text-sm font-medium">Preview</span>
-              </div>
-              <div className="flex-1 mx-4 h-1 bg-neutral-200">
-                <div className={`h-full ${currentStepNumber > 2 ? 'bg-green-600' : 'bg-neutral-200'}`} />
-              </div>
-              <div className={`flex items-center gap-2 ${currentStepNumber >= 3 ? 'text-neutral-900' : 'text-neutral-400'}`}>
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  currentStepNumber >= 3 ? 'bg-neutral-900 text-white' : 'bg-neutral-200'
-                }`}>
-                  3
-                </div>
-                <span className="text-sm font-medium">Mapping</span>
+              <p className="text-lg font-semibold text-neutral-800">Drag & drop your spreadsheet here</p>
+              <p className="text-sm text-neutral-500 mt-2 mb-4">or click to browse files</p>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {['.CSV', '.XLSX', '.XLS', '.TSV', '.JSON'].map(ext => (
+                  <Badge key={ext} variant="secondary" className="text-xs">{ext}</Badge>
+                ))}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* Step A: Upload */}
-        {currentStep === 'upload' && (
-          <Card>
-            <CardContent className="pt-6">
-              <div
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                className="border-2 border-dashed border-neutral-300 rounded-lg p-12 text-center hover:border-neutral-400 transition-colors cursor-pointer"
-              >
-                <input
-                  type="file"
-                  id="file-upload"
-                  className="hidden"
-                  accept=".xlsx,.csv"
-                  onChange={handleFileSelect}
-                />
-                <label htmlFor="file-upload" className="cursor-pointer">
-                  <Upload className="mx-auto h-12 w-12 text-neutral-400 mb-4" />
-                  <h3 className="font-semibold text-lg mb-2">Drop your spreadsheet here</h3>
-                  <p className="text-sm text-neutral-600 mb-4">or click to browse</p>
-                  <Badge variant="outline" className="mb-2">Supported: .xlsx, .csv</Badge>
-                </label>
-              </div>
-
-              {uploadProgress > 0 && uploadProgress < 100 && (
-                <div className="mt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">{fileName}</span>
-                    <span className="text-sm text-neutral-600">{uploadProgress}%</span>
-                  </div>
-                  <Progress value={uploadProgress} />
-                  <p className="text-xs text-neutral-500 mt-2">Uploading and parsing file...</p>
-                </div>
-              )}
-
-              <div className="mt-8 pt-6 border-t">
-                <div className="flex items-start gap-2 text-sm text-blue-600">
-                  <Download className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <a href="#" className="font-medium hover:underline">Download sample template</a>
-                    <p className="text-xs text-neutral-600 mt-1">
-                      See an example of a properly formatted spreadsheet
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Step B: Preview */}
-        {currentStep === 'preview' && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Preview Data</CardTitle>
-                <p className="text-sm text-neutral-600">First 20 rows from {fileName}</p>
-              </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {Object.keys(previewData[0]).map(key => (
-                          <TableHead key={key} className="capitalize">{key}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {previewData.map((row, index) => (
-                        <TableRow key={index}>
-                          {Object.values(row).map((value, i) => (
-                            <TableCell key={i}>{value}</TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="mt-4">
-                  <p className="text-sm text-neutral-600 mb-2">Detected columns:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {detectedColumns.map(col => (
-                      <Badge key={col} variant="outline">{col}</Badge>
+            {/* Saved templates */}
+            {state.mappingTemplates.length > 0 && (
+              <Card>
+                <CardContent className="pt-4 pb-3">
+                  <p className="text-sm font-medium text-neutral-700 mb-2">Saved Templates</p>
+                  <div className="space-y-2">
+                    {state.mappingTemplates.map(t => (
+                      <div key={t.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-neutral-50">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="h-4 w-4 text-neutral-400" />
+                          <span className="text-sm">{t.name}</span>
+                          {t.source && <Badge variant="outline" className="text-xs">{t.source}</Badge>}
+                        </div>
+                        <span className="text-xs text-neutral-400">Used {t.lastUsed}</span>
+                      </div>
                     ))}
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {warnings.length > 0 && (
-              <Card className="border-yellow-200 bg-yellow-50">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <AlertCircle className="h-5 w-5 text-yellow-600" />
-                    Warnings
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-2">
-                    {warnings.map((warning, index) => (
-                      <li key={index} className="text-sm text-yellow-900 flex items-start gap-2">
-                        <span className="text-yellow-600">•</span>
-                        {warning}
-                      </li>
-                    ))}
-                  </ul>
                 </CardContent>
               </Card>
             )}
 
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setCurrentStep('upload')}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Button>
-              <Button onClick={() => setCurrentStep('mapping')}>
-                Continue to Mapping
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+            <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-xl">
+              <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-blue-800">Any format works</p>
+                <p className="text-xs text-blue-600 mt-0.5">Cropbase uses AI to auto-detect columns and map your data. Just upload and we'll handle the rest.</p>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Step C: Mapping */}
-        {currentStep === 'mapping' && (
+        {/* ─── STEP: Preview ─────────────────────────────────── */}
+        {step === 'preview' && (
           <div className="space-y-6">
+            {/* File info card */}
             <Card>
-              <CardHeader>
-                <CardTitle>Map Columns</CardTitle>
-                <p className="text-sm text-neutral-600">Match your spreadsheet columns to Cropbase fields</p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-sm font-semibold">Required mappings</h4>
-                    <Button variant="outline" size="sm">
-                      Use suggested mapping
-                    </Button>
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-green-50 flex items-center justify-center">
+                    <FileSpreadsheet className="h-5 w-5 text-green-600" />
                   </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="map-field">Field Name *</Label>
-                      <Select defaultValue="field">
-                        <SelectTrigger id="map-field">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {detectedColumns.map(col => (
-                            <SelectItem key={col} value={col}>{col}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="map-crop">Crop *</Label>
-                      <Select defaultValue="crop">
-                        <SelectTrigger id="map-crop">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {detectedColumns.map(col => (
-                            <SelectItem key={col} value={col}>{col}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="map-stage">Growth Stage *</Label>
-                      <Select defaultValue="stage">
-                        <SelectTrigger id="map-stage">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {detectedColumns.map(col => (
-                            <SelectItem key={col} value={col}>{col}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="map-task-due">Task Due Date</Label>
-                      <Select defaultValue="due">
-                        <SelectTrigger id="map-task-due">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">-- Not mapped --</SelectItem>
-                          {detectedColumns.map(col => (
-                            <SelectItem key={col} value={col}>{col}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{file?.name}</p>
+                    <p className="text-xs text-neutral-500">{file ? `${(file.size / 1024).toFixed(1)} KB` : ''}</p>
                   </div>
-
-                  <div className="pt-4 border-t">
-                    <h4 className="text-sm font-semibold mb-4">Optional mappings</h4>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <Label htmlFor="map-acres">Acreage</Label>
-                        <Select defaultValue="acres">
-                          <SelectTrigger id="map-acres">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">-- Not mapped --</SelectItem>
-                            {detectedColumns.map(col => (
-                              <SelectItem key={col} value={col}>{col}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="map-irrigation">Irrigation Type</Label>
-                        <Select defaultValue="irrigation">
-                          <SelectTrigger id="map-irrigation">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">-- Not mapped --</SelectItem>
-                            {detectedColumns.map(col => (
-                              <SelectItem key={col} value={col}>{col}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="map-task">Next Planned Task</Label>
-                        <Select defaultValue="task">
-                          <SelectTrigger id="map-task">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">-- Not mapped --</SelectItem>
-                            {detectedColumns.map(col => (
-                              <SelectItem key={col} value={col}>{col}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="map-notes">Notes</Label>
-                        <Select defaultValue="notes">
-                          <SelectTrigger id="map-notes">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">-- Not mapped --</SelectItem>
-                            {detectedColumns.map(col => (
-                              <SelectItem key={col} value={col}>{col}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t">
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="save-template"
-                        checked={saveMappingTemplate}
-                        onCheckedChange={setSaveMappingTemplate}
-                      />
-                      <Label htmlFor="save-template" className="cursor-pointer">
-                        Save mapping template for future imports
-                      </Label>
-                    </div>
-                  </div>
+                  {parseProgress < 100 ? (
+                    <Badge className="bg-yellow-100 text-yellow-700">Parsing…</Badge>
+                  ) : (
+                    <Badge className="bg-green-100 text-green-700">Ready</Badge>
+                  )}
                 </div>
+                {parseProgress < 100 && (
+                  <div className="mt-3">
+                    <Progress value={parseProgress} className="h-1.5" />
+                    <p className="text-xs text-neutral-400 mt-1">Analyzing file structure…</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            <Card className="border-blue-200 bg-blue-50">
-              <CardHeader>
-                <CardTitle className="text-base">Live Preview</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-neutral-700 mb-3">How your data will appear:</p>
-                <div className="bg-white rounded border border-neutral-200 p-3 text-sm space-y-2">
-                  <div><span className="font-medium">Field:</span> Field A</div>
-                  <div><span className="font-medium">Crop:</span> Rice</div>
-                  <div><span className="font-medium">Stage:</span> Heading</div>
-                  <div><span className="font-medium">Acres:</span> 45</div>
-                  <div><span className="font-medium">Irrigation:</span> Flood</div>
-                  <div><span className="font-medium">Next Task:</span> Check flood levels (Due: Feb 14)</div>
+            {/* Simulated data preview */}
+            {parseProgress >= 100 && (
+              <>
+                <div className="flex items-center gap-2 mb-1">
+                  <Sparkles className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm font-medium">Auto-detected {SIMULATED_ROWS.length} rows across {new Set(SIMULATED_ROWS.map(r => r.field)).size} fields</span>
                 </div>
+
+                <div className="rounded-xl border overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-neutral-50 border-b">
+                          {['Field', 'Task', 'Category', 'Priority', 'Due Date'].map(h => (
+                            <th key={h} className="text-left p-3 font-medium text-neutral-600">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {SIMULATED_ROWS.slice(0, 5).map((row, i) => (
+                          <tr key={i} className="border-b last:border-0 hover:bg-neutral-50/50">
+                            <td className="p-3 font-medium">{row.field}</td>
+                            <td className="p-3">{row.task}</td>
+                            <td className="p-3"><Badge variant="outline" className="capitalize text-xs">{row.category}</Badge></td>
+                            <td className="p-3">
+                              <Badge className={`text-xs ${
+                                row.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                                row.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                                row.priority === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                                'bg-neutral-100 text-neutral-600'
+                              }`}>{row.priority}</Badge>
+                            </td>
+                            <td className="p-3 text-neutral-500">{row.dueDate}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {SIMULATED_ROWS.length > 5 && (
+                    <div className="bg-neutral-50 p-2 text-center text-xs text-neutral-500">
+                      + {SIMULATED_ROWS.length - 5} more rows
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => { setStep('upload'); setFile(null); }}>
+                    <ArrowLeft className="h-4 w-4 mr-2" /> Back
+                  </Button>
+                  <Button className="bg-green-600 hover:bg-green-700" onClick={() => setStep('mapping')}>
+                    Continue to Mapping <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ─── STEP: Mapping ─────────────────────────────────── */}
+        {step === 'mapping' && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2">
+              <Columns3 className="h-5 w-5 text-green-600" />
+              <div>
+                <p className="font-semibold">Column Mapping</p>
+                <p className="text-sm text-neutral-500">We auto-mapped your columns. Adjust if needed.</p>
+              </div>
+            </div>
+
+            <Card>
+              <CardContent className="pt-4 space-y-4">
+                {SIMULATED_COLUMNS.map((col, i) => (
+                  <div key={col} className="flex items-center gap-4">
+                    <div className="w-32 text-right">
+                      <Badge variant="outline" className="font-mono text-xs">{col}</Badge>
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-neutral-300 shrink-0" />
+                    <Select value={mappings[col]} onValueChange={v => setMappings(prev => ({ ...prev, [col]: v }))}>
+                      <SelectTrigger className="w-48">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CROPBASE_COLUMNS.map(cc => (
+                          <SelectItem key={cc} value={cc}>{cc}</SelectItem>
+                        ))}
+                        <SelectItem value="--skip--">Skip column</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setCurrentStep('preview')}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
+            <div className="flex items-center gap-2 p-3 bg-neutral-50 rounded-lg">
+              <input
+                type="checkbox"
+                checked={saveTemplate}
+                onChange={e => setSaveTemplate(e.target.checked)}
+                className="rounded border-neutral-300 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-sm text-neutral-700">Save this mapping as a template for future imports</span>
+            </div>
+
+            <Separator />
+
+            <div className="flex items-center justify-between">
+              <Button variant="outline" onClick={() => setStep('preview')}>
+                <ArrowLeft className="h-4 w-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setCurrentStep('success')}>
-                Create Dashboard
-                <CheckCheck className="ml-2 h-4 w-4" />
+              <Button className="bg-green-600 hover:bg-green-700" onClick={handleImport}>
+                <Wand2 className="h-4 w-4 mr-2" /> Import {SIMULATED_ROWS.length} Tasks
               </Button>
             </div>
           </div>
         )}
 
-        {/* Success Screen */}
-        {currentStep === 'success' && (
-          <Card className="border-green-200">
-            <CardContent className="pt-16 pb-12 text-center">
-              <div className="mx-auto w-fit p-4 rounded-full bg-green-100 mb-6">
-                <CheckCircle2 className="h-12 w-12 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Dashboard created!</h2>
-              <p className="text-neutral-600 mb-8 max-w-md mx-auto">
-                Your spreadsheet has been converted into a live operational dashboard
-              </p>
+        {/* ─── STEP: Processing ──────────────────────────────── */}
+        {step === 'processing' && (
+          <div className="text-center py-12">
+            <div className="h-16 w-16 mx-auto rounded-2xl bg-green-50 flex items-center justify-center mb-6">
+              <Loader2 className="h-8 w-8 text-green-600 animate-spin" />
+            </div>
+            <p className="text-lg font-semibold">Importing your data…</p>
+            <p className="text-sm text-neutral-500 mt-1 mb-6">Creating tasks and updating your dashboard</p>
+            <div className="max-w-xs mx-auto">
+              <Progress value={parseProgress} className="h-2" />
+              <p className="text-xs text-neutral-400 mt-2">{Math.round(parseProgress)}% complete</p>
+            </div>
+          </div>
+        )}
 
-              <div className="grid gap-4 sm:grid-cols-3 mb-10 max-w-2xl mx-auto">
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-3xl font-bold text-green-600">6</div>
-                    <div className="text-sm text-neutral-600 mt-1">Fields created</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-3xl font-bold text-green-600">25</div>
-                    <div className="text-sm text-neutral-600 mt-1">Tasks imported</div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-3xl font-bold text-green-600">9</div>
-                    <div className="text-sm text-neutral-600 mt-1">Notes imported</div>
-                  </CardContent>
-                </Card>
-              </div>
+        {/* ─── STEP: Success ─────────────────────────────────── */}
+        {step === 'success' && (
+          <div className="text-center py-8">
+            <div className="h-20 w-20 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-6">
+              <CheckCircle2 className="h-10 w-10 text-green-600" />
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Import Complete!</h2>
+            <p className="text-neutral-600 mb-6">Your data has been processed and your dashboard is updated.</p>
 
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button size="lg" onClick={() => navigate('/dashboard')}>
-                  Go to Overview
-                </Button>
-                <Button size="lg" variant="outline" onClick={() => navigate('/dashboard/today')}>
-                  Review Today Plan
-                </Button>
-                <Button size="lg" variant="outline" onClick={() => navigate('/dashboard/alerts')}>
-                  Set Alerts
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+            <div className="grid grid-cols-3 gap-4 max-w-md mx-auto mb-8">
+              <Card>
+                <CardContent className="pt-4 pb-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{importResult.tasks}</p>
+                  <p className="text-xs text-neutral-500">Tasks Created</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{importResult.fields}</p>
+                  <p className="text-xs text-neutral-500">Fields Detected</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-4 pb-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">1</p>
+                  <p className="text-xs text-neutral-500">Template Saved</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button className="bg-green-600 hover:bg-green-700 w-full sm:w-auto" onClick={() => navigate('/app')}>
+                <LayoutDashboard className="h-4 w-4 mr-2" /> Go to Dashboard
+              </Button>
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/app/today')}>
+                <Calendar className="h-4 w-4 mr-2" /> Today's Plan
+              </Button>
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/app/tasks')}>
+                <ListTodo className="h-4 w-4 mr-2" /> View Tasks
+              </Button>
+            </div>
+
+            <Separator className="my-8" />
+
+            <Button variant="ghost" size="sm" onClick={() => { setStep('upload'); setFile(null); }}>
+              <Upload className="h-4 w-4 mr-2" /> Import another file
+            </Button>
+          </div>
         )}
       </div>
     </div>

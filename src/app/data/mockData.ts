@@ -225,7 +225,7 @@ export const demoTasks: Task[] = [
     category: 'maintenance',
     dueDate: '2026-02-14',
     window: 'afternoon',
-    status: 'done',
+    status: 'todo',
     priority: 'low',
     notes: 'Run full cycle test',
     overdue: false

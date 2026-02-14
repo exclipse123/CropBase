@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Checkbox } from './ui/checkbox';
@@ -19,6 +19,8 @@ import {
 } from './ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Download, CheckCircle2, Share2 } from 'lucide-react';
+import { useApp } from '../store/AppContext';
+import { toast } from 'sonner';
 
 interface ExportModalProps {
   open: boolean;
@@ -27,12 +29,8 @@ interface ExportModalProps {
   description?: string;
 }
 
-export function ExportModal({ 
-  open, 
-  onOpenChange, 
-  title = 'Export Data', 
-  description = 'Choose what to export' 
-}: ExportModalProps) {
+export function ExportModal({ open, onOpenChange, title = 'Export Data', description = 'Choose what to export' }: ExportModalProps) {
+  const { state, exportCSV } = useApp();
   const [format, setFormat] = useState('csv');
   const [scope, setScope] = useState('today');
   const [includeNotes, setIncludeNotes] = useState(true);
@@ -42,26 +40,85 @@ export function ExportModal({
   const [isExporting, setIsExporting] = useState(false);
   const [exportComplete, setExportComplete] = useState(false);
 
+  const scopeData = useMemo(() => {
+    switch (scope) {
+      case 'today':
+        return state.tasks.filter(t => t.dueDate === '2026-02-14' && t.status !== 'done');
+      case 'week':
+        return state.tasks.filter(t => new Date(t.dueDate) <= new Date('2026-02-20'));
+      case 'fields':
+        return state.fields as unknown as typeof state.tasks;
+      case 'all':
+      default:
+        return state.tasks;
+    }
+  }, [scope, state.tasks, state.fields]);
+
+  const previewRows = useMemo(() => {
+    if (scope === 'fields') {
+      return state.fields.slice(0, 5).map(f => ({
+        Field: f.name,
+        Crop: f.crop,
+        Stage: f.stage,
+        Acreage: f.acreage,
+        Status: f.status,
+      }));
+    }
+    const tasks = scope === 'today'
+      ? state.tasks.filter(t => t.dueDate === '2026-02-14' && t.status !== 'done')
+      : scope === 'week'
+        ? state.tasks.filter(t => new Date(t.dueDate) <= new Date('2026-02-20'))
+        : state.tasks;
+    return tasks.slice(0, 5).map(t => ({
+      Field: t.field,
+      Task: t.title,
+      'Due Date': t.dueDate,
+      Status: t.status,
+      ...(includeNotes ? { Notes: t.notes || '' } : {}),
+      ...(includeTags ? { Category: t.category } : {}),
+    }));
+  }, [scope, state.tasks, state.fields, includeNotes, includeTags]);
+
   const handleExport = () => {
     setIsExporting(true);
-    // Simulate export
     setTimeout(() => {
+      let data: Record<string, unknown>[];
+      let filename: string;
+
+      if (scope === 'fields') {
+        data = state.fields.map(f => ({
+          Field: f.name, Crop: f.crop, Stage: f.stage, Acreage: f.acreage,
+          Irrigation: f.irrigationType, 'Overdue Count': f.overdueCount, Status: f.status,
+        }));
+        filename = 'cropbase-fields-export.csv';
+      } else {
+        const tasks = scope === 'today'
+          ? state.tasks.filter(t => t.dueDate === '2026-02-14')
+          : scope === 'week'
+            ? state.tasks.filter(t => new Date(t.dueDate) <= new Date('2026-02-20'))
+            : state.tasks;
+        data = tasks.map(t => ({
+          Field: t.field, Task: t.title, Category: t.category, 'Due Date': t.dueDate,
+          Window: t.window || '', Status: t.status, Priority: t.priority,
+          ...(includeNotes ? { Notes: t.notes || '' } : {}),
+          ...(includeMetadata ? { 'Created From': t.createdFrom || '' } : {}),
+        }));
+        filename = `cropbase-${scope}-export.csv`;
+      }
+
+      if (format === 'csv') {
+        exportCSV(data, filename);
+      }
+
       setIsExporting(false);
       setExportComplete(true);
+      toast.success('Export complete', { description: `${data.length} rows exported as ${format.toUpperCase()}` });
       setTimeout(() => {
         setExportComplete(false);
         onOpenChange(false);
-      }, 2000);
-    }, 1500);
+      }, 1500);
+    }, 800);
   };
-
-  const previewData = [
-    { field: 'Field A', task: 'Check flood levels', due: '2026-02-14', status: 'To Do' },
-    { field: 'Field C', task: 'Scout for aphids', due: '2026-02-14', status: 'To Do' },
-    { field: 'Field E', task: 'Inspect bloom health', due: '2026-02-14', status: 'In Progress' },
-    { field: 'Field B', task: 'Apply nitrogen fertilizer', due: '2026-02-14', status: 'Blocked' },
-    { field: 'Field F', task: 'Adjust drip emitters', due: '2026-02-14', status: 'To Do' },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,34 +132,27 @@ export function ExportModal({
           <Tabs defaultValue="options" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="options">Export Options</TabsTrigger>
-              <TabsTrigger value="preview">Preview (5 rows)</TabsTrigger>
+              <TabsTrigger value="preview">Preview ({Math.min(previewRows.length, 5)} rows)</TabsTrigger>
             </TabsList>
 
             <TabsContent value="options" className="space-y-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="export-scope">Scope</Label>
+                  <Label>Scope</Label>
                   <Select value={scope} onValueChange={setScope}>
-                    <SelectTrigger id="export-scope">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="today">Today Plan</SelectItem>
                       <SelectItem value="week">This week</SelectItem>
-                      <SelectItem value="filtered">Tasks (filtered)</SelectItem>
                       <SelectItem value="fields">Fields report</SelectItem>
-                      <SelectItem value="worklog">Work log</SelectItem>
                       <SelectItem value="all">All tasks</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="export-format">Format</Label>
+                  <Label>Format</Label>
                   <Select value={format} onValueChange={setFormat}>
-                    <SelectTrigger id="export-format">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="csv">CSV (Excel compatible)</SelectItem>
                       <SelectItem value="pdf">PDF (read-only)</SelectItem>
@@ -115,58 +165,26 @@ export function ExportModal({
                 <Label>Include Columns</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-notes"
-                      checked={includeNotes}
-                      onCheckedChange={(checked) => setIncludeNotes(checked as boolean)}
-                    />
-                    <Label htmlFor="include-notes" className="cursor-pointer font-normal text-sm">
-                      Task notes
-                    </Label>
+                    <Checkbox id="inc-notes" checked={includeNotes} onCheckedChange={(c) => setIncludeNotes(c as boolean)} />
+                    <Label htmlFor="inc-notes" className="cursor-pointer font-normal text-sm">Task notes</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-history"
-                      checked={includeHistory}
-                      onCheckedChange={(checked) => setIncludeHistory(checked as boolean)}
-                    />
-                    <Label htmlFor="include-history" className="cursor-pointer font-normal text-sm">
-                      Audit history
-                    </Label>
+                    <Checkbox id="inc-history" checked={includeHistory} onCheckedChange={(c) => setIncludeHistory(c as boolean)} />
+                    <Label htmlFor="inc-history" className="cursor-pointer font-normal text-sm">Audit history</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-tags"
-                      checked={includeTags}
-                      onCheckedChange={(checked) => setIncludeTags(checked as boolean)}
-                    />
-                    <Label htmlFor="include-tags" className="cursor-pointer font-normal text-sm">
-                      Tags & categories
-                    </Label>
+                    <Checkbox id="inc-tags" checked={includeTags} onCheckedChange={(c) => setIncludeTags(c as boolean)} />
+                    <Label htmlFor="inc-tags" className="cursor-pointer font-normal text-sm">Tags & categories</Label>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="include-metadata"
-                      checked={includeMetadata}
-                      onCheckedChange={(checked) => setIncludeMetadata(checked as boolean)}
-                    />
-                    <Label htmlFor="include-metadata" className="cursor-pointer font-normal text-sm">
-                      Import metadata
-                    </Label>
+                    <Checkbox id="inc-meta" checked={includeMetadata} onCheckedChange={(c) => setIncludeMetadata(c as boolean)} />
+                    <Label htmlFor="inc-meta" className="cursor-pointer font-normal text-sm">Import metadata</Label>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <Share2 className="h-5 w-5 text-green-600 mt-0.5" />
-                  <div>
-                    <p className="font-medium text-green-900 text-sm">Share Export (Optional)</p>
-                    <p className="text-sm text-green-700 mt-1">
-                      After export, you can generate a share link for crew members
-                    </p>
-                  </div>
-                </div>
+              <div className="bg-neutral-50 border rounded-lg p-4 text-sm text-neutral-600">
+                <strong>{scopeData.length}</strong> rows will be exported
               </div>
             </TabsContent>
 
@@ -176,19 +194,17 @@ export function ExportModal({
                   <table className="w-full text-sm">
                     <thead className="bg-neutral-50 border-b">
                       <tr>
-                        <th className="text-left p-3 font-medium">Field</th>
-                        <th className="text-left p-3 font-medium">Task</th>
-                        <th className="text-left p-3 font-medium">Due Date</th>
-                        <th className="text-left p-3 font-medium">Status</th>
+                        {previewRows.length > 0 && Object.keys(previewRows[0]).map(key => (
+                          <th key={key} className="text-left p-3 font-medium">{key}</th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {previewData.map((row, idx) => (
+                      {previewRows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-neutral-50">
-                          <td className="p-3">{row.field}</td>
-                          <td className="p-3">{row.task}</td>
-                          <td className="p-3">{row.due}</td>
-                          <td className="p-3">{row.status}</td>
+                          {Object.values(row).map((val, i) => (
+                            <td key={i} className="p-3">{String(val)}</td>
+                          ))}
                         </tr>
                       ))}
                     </tbody>
@@ -196,7 +212,7 @@ export function ExportModal({
                 </div>
               </div>
               <p className="text-sm text-neutral-600 mt-3">
-                Showing first 5 rows. Total rows to export: <strong>12</strong>
+                Showing first {previewRows.length} rows. Total: <strong>{scopeData.length}</strong>
               </p>
             </TabsContent>
           </Tabs>
@@ -204,28 +220,18 @@ export function ExportModal({
           <div className="py-12 text-center">
             <CheckCircle2 className="mx-auto h-12 w-12 text-green-600 mb-4" />
             <h3 className="font-semibold text-lg mb-2">Export complete!</h3>
-            <p className="text-sm text-neutral-600">
-              Your file is downloading now
-            </p>
+            <p className="text-sm text-neutral-600">Your file has been downloaded</p>
           </div>
         )}
 
         {!exportComplete && (
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>Cancel</Button>
             <Button onClick={handleExport} disabled={isExporting} className="bg-green-600 hover:bg-green-700">
               {isExporting ? (
-                <>
-                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Exporting...
-                </>
+                <><div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />Exporting...</>
               ) : (
-                <>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download {format.toUpperCase()}
-                </>
+                <><Download className="mr-2 h-4 w-4" />Download {format.toUpperCase()}</>
               )}
             </Button>
           </DialogFooter>

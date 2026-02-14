@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Outlet, Link, useLocation } from 'react-router';
 import { 
   LayoutDashboard, 
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ import {
 import { HelpDrawer } from '../HelpDrawer';
 import { SearchDropdown } from '../SearchDropdown';
 import { DataFreshnessModal } from '../DataFreshnessModal';
+import { useApp } from '../../store/AppContext';
 
 const navItems = [
   { path: '/app', label: 'Overview', icon: LayoutDashboard },
@@ -45,6 +47,21 @@ export function RootLayout() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [dataFreshnessOpen, setDataFreshnessOpen] = useState(false);
   const location = useLocation();
+  const { state, dispatch } = useApp();
+
+  const unreadCount = state.notifications.filter(n => !n.read).length;
+
+  const importAgo = useMemo(() => {
+    const importDate = new Date(state.lastImportTime);
+    const now = new Date('2026-02-14T12:02:00'); // simulated now
+    const diffMs = now.getTime() - importDate.getTime();
+    const mins = Math.floor(diffMs / (1000 * 60));
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }, [state.lastImportTime]);
 
   const isActive = (path: string) => {
     if (path === '/app') {
@@ -79,19 +96,19 @@ export function RootLayout() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="hidden md:flex gap-2">
-                  Aggie Demo Farm
+                  {state.farmSettings.farmName}
                   <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                <DropdownMenuItem>Aggie Demo Farm</DropdownMenuItem>
+                <DropdownMenuItem>{state.farmSettings.farmName}</DropdownMenuItem>
                 <DropdownMenuItem>Switch farm...</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
 
             <div className="hidden md:flex items-center gap-2 text-sm text-neutral-600">
               <MapPin className="h-4 w-4" />
-              <span>California Central Valley</span>
+              <span>{state.farmSettings.location}</span>
             </div>
           </div>
 
@@ -103,7 +120,7 @@ export function RootLayout() {
             >
               <Upload className="h-3.5 w-3.5" />
               <span className="hidden md:inline">Last import</span>
-              <span className="font-medium">2 hours ago</span>
+              <span className="font-medium">{importAgo}</span>
             </button>
 
             <div className="hidden md:block relative">
@@ -126,6 +143,44 @@ export function RootLayout() {
             >
               <HelpCircle className="h-5 w-5" />
             </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      {unreadCount}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <div className="flex items-center justify-between px-3 py-2 border-b">
+                  <span className="font-semibold text-sm">Notifications</span>
+                  {unreadCount > 0 && (
+                    <button 
+                      className="text-xs text-green-700 hover:underline"
+                      onClick={() => dispatch({ type: 'NOTIFICATIONS_MARK_ALL_READ' })}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+                {state.notifications.slice(0, 5).map(n => (
+                  <DropdownMenuItem 
+                    key={n.id} 
+                    className={`flex flex-col items-start gap-1 ${!n.read ? 'bg-blue-50' : ''}`}
+                    onClick={() => dispatch({ type: 'NOTIFICATION_MARK_READ', payload: n.id })}
+                  >
+                    <span className="text-sm">{n.message}</span>
+                    <span className="text-xs text-neutral-500">
+                      {new Date(n.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

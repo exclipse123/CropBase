@@ -1,8 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
+import { Checkbox } from '../components/ui/checkbox';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '../components/ui/sheet';
 import {
   Select,
   SelectContent,
@@ -11,332 +19,346 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../components/ui/sheet';
-import { Search, Plus, Calendar, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
-import { demoTasks } from '../data/mockData';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
+import {
+  Search,
+  Plus,
+  Filter,
+  MoreVertical,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Droplet,
+  Wind,
+  Leaf,
+  Target,
+  Sprout,
+  Wrench,
+  Trash2,
+  Calendar,
+} from 'lucide-react';
+import { useApp } from '../store/AppContext';
+import { CreateTaskModal } from '../components/CreateTaskModal';
+import { toast } from 'sonner';
 
 export default function Tasks() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const { state, dispatch } = useApp();
+  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [selectedTask, setSelectedTask] = useState<typeof demoTasks[0] | null>(null);
+  const [fieldFilter, setFieldFilter] = useState<string>('all');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
 
-  const filteredTasks = demoTasks.filter(task => {
-    const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         task.field.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || task.category === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
-  });
-
-  const groupedTasks = {
-    today: filteredTasks.filter(t => t.dueDate === '2026-02-14'),
-    tonight: filteredTasks.filter(t => t.dueDate === '2026-02-14' && t.window === 'night'),
-    tomorrow: filteredTasks.filter(t => t.dueDate === '2026-02-15'),
-    thisWeek: filteredTasks.filter(t => {
-      const due = new Date(t.dueDate);
-      const today = new Date('2026-02-14');
-      const weekEnd = new Date('2026-02-20');
-      return due > today && due <= weekEnd && t.dueDate !== '2026-02-15';
-    }),
-    later: filteredTasks.filter(t => new Date(t.dueDate) > new Date('2026-02-20')),
-    overdue: filteredTasks.filter(t => t.overdue)
-  };
-
-  const categories = Array.from(new Set(demoTasks.map(t => t.category)));
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'done':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Done</Badge>;
-      case 'inprogress':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">In Progress</Badge>;
-      default:
-        return <Badge variant="outline">To Do</Badge>;
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'irrigation': return <Droplet className="h-4 w-4 text-blue-600" />;
+      case 'fertilization': return <Leaf className="h-4 w-4 text-green-600" />;
+      case 'spray': return <Wind className="h-4 w-4 text-purple-600" />;
+      case 'scout': return <Target className="h-4 w-4 text-orange-600" />;
+      case 'harvest': return <Sprout className="h-4 w-4 text-yellow-600" />;
+      case 'maintenance': return <Wrench className="h-4 w-4 text-neutral-600" />;
+      default: return <Target className="h-4 w-4 text-neutral-600" />;
     }
   };
 
-  const TaskCard = ({ task }: { task: typeof demoTasks[0] }) => (
-    <Sheet>
-      <SheetTrigger asChild>
-        <div
-          className="cursor-pointer rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-300 hover:shadow-sm transition-all"
-          onClick={() => setSelectedTask(task)}
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex-1 min-w-0">
-              <h4 className="font-semibold truncate">{task.title}</h4>
-              <p className="text-sm text-neutral-600 mt-1">{task.field}</p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                <Badge variant="outline" className="text-xs capitalize">
-                  {task.category}
-                </Badge>
-                {task.window && (
-                  <Badge variant="outline" className="text-xs capitalize">
-                    {task.window}
-                  </Badge>
-                )}
-                {getStatusBadge(task.status)}
-                {task.overdue && task.status !== 'done' && (
-                  <Badge variant="destructive" className="text-xs">Overdue</Badge>
-                )}
-                {task.blocked && (
-                  <Badge variant="destructive" className="bg-red-100 text-red-700 border-red-200 text-xs">
-                    Blocked
-                  </Badge>
-                )}
-              </div>
-            </div>
-            <div className="text-sm text-neutral-500 ml-4">
-              {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </div>
-          </div>
-        </div>
-      </SheetTrigger>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>{task.title}</SheetTitle>
-          <SheetDescription>{task.field}</SheetDescription>
-        </SheetHeader>
-        <div className="mt-6 space-y-6">
-          {/* Task Details */}
-          <div>
-            <h4 className="text-sm font-semibold mb-2">Details</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Category:</span>
-                <span className="capitalize">{task.category}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Due date:</span>
-                <span>{new Date(task.dueDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-              </div>
-              {task.window && (
-                <div className="flex justify-between">
-                  <span className="text-neutral-600">Window:</span>
-                  <span className="capitalize">{task.window}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Priority:</span>
-                <span className="capitalize">{task.priority}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-600">Status:</span>
-                {getStatusBadge(task.status)}
-              </div>
-            </div>
-          </div>
+  const getStatusBadge = (status: string, overdue?: boolean, blocked?: boolean) => {
+    if (blocked) return <Badge className="bg-red-100 text-red-700 border-red-200">Blocked</Badge>;
+    if (overdue) return <Badge variant="destructive">Overdue</Badge>;
+    switch (status) {
+      case 'done': return <Badge className="bg-green-100 text-green-700 border-green-200">Done</Badge>;
+      case 'inprogress': return <Badge className="bg-blue-100 text-blue-700 border-blue-200">In Progress</Badge>;
+      case 'todo': return <Badge variant="outline">To Do</Badge>;
+      default: return <Badge variant="outline">{status}</Badge>;
+    }
+  };
 
-          {/* Notes */}
-          {task.notes && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2">Notes</h4>
-              <p className="text-sm text-neutral-700 bg-neutral-50 rounded p-3">
-                {task.notes}
-              </p>
-            </div>
-          )}
+  const filtered = useMemo(() => {
+    return state.tasks.filter(t => {
+      if (search && !t.title.toLowerCase().includes(search.toLowerCase()) && !t.field.toLowerCase().includes(search.toLowerCase())) return false;
+      if (statusFilter === 'overdue' && !t.overdue) return false;
+      if (statusFilter === 'blocked' && !t.blocked) return false;
+      if (statusFilter !== 'all' && statusFilter !== 'overdue' && statusFilter !== 'blocked' && t.status !== statusFilter) return false;
+      if (categoryFilter !== 'all' && t.category !== categoryFilter) return false;
+      if (fieldFilter !== 'all' && t.field !== fieldFilter) return false;
+      return true;
+    });
+  }, [state.tasks, search, statusFilter, categoryFilter, fieldFilter]);
 
-          {/* Blocked Status */}
-          {task.blocked && task.blockReason && (
-            <div>
-              <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                Blocked
-              </h4>
-              <p className="text-sm text-red-900 bg-red-50 rounded border border-red-100 p-3">
-                {task.blockReason}
-              </p>
-            </div>
-          )}
+  const grouped = useMemo(() => {
+    const groups: Record<string, typeof filtered> = {};
+    for (const t of filtered) {
+      const key = t.dueDate || 'No date';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    }
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [filtered]);
 
-          {/* Audit Trail */}
-          <div>
-            <h4 className="text-sm font-semibold mb-2">History</h4>
-            <div className="space-y-2 text-xs">
-              {task.createdFrom && (
-                <div className="flex gap-2 text-neutral-600">
-                  <div className="mt-1 h-1.5 w-1.5 rounded-full bg-neutral-400 flex-shrink-0" />
-                  <div>
-                    <p>Imported from {task.createdFrom}</p>
-                    <p className="text-neutral-500">Feb 14, 5:00 AM</p>
-                  </div>
-                </div>
-              )}
-              {task.movedReason && (
-                <div className="flex gap-2 text-neutral-600">
-                  <div className="mt-1 h-1.5 w-1.5 rounded-full bg-neutral-400 flex-shrink-0" />
-                  <div>
-                    <p>{task.movedReason}</p>
-                    <p className="text-neutral-500">Feb 14, 6:30 AM</p>
-                  </div>
-                </div>
-              )}
-              <div className="flex gap-2 text-neutral-600">
-                <div className="mt-1 h-1.5 w-1.5 rounded-full bg-neutral-400 flex-shrink-0" />
-                <div>
-                  <p>Task created</p>
-                  <p className="text-neutral-500">Feb 10, 2:00 PM</p>
-                </div>
-              </div>
-            </div>
-          </div>
+  const selectedTask = selectedTaskId ? state.tasks.find(t => t.id === selectedTaskId) : null;
+  const uniqueFields = [...new Set(state.tasks.map(t => t.field))].sort();
 
-          {/* Actions */}
-          <div className="space-y-2 pt-4 border-t">
-            <Button className="w-full">
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Mark as done
-            </Button>
-            <Button variant="outline" className="w-full">
-              Edit task
-            </Button>
-            <Button variant="outline" className="w-full">
-              Snooze
-            </Button>
-            <Button variant="ghost" className="w-full text-red-600 hover:text-red-700 hover:bg-red-50">
-              Delete task
-            </Button>
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
+  const handleMarkDone = (taskId: string) => {
+    dispatch({ type: 'TASK_MARK_DONE', payload: taskId });
+    toast.success('Task marked as done');
+  };
 
-  const TaskGroup = ({ title, tasks, icon }: { title: string; tasks: typeof demoTasks; icon?: React.ReactNode }) => {
-    if (tasks.length === 0) return null;
+  const handleSnooze = (taskId: string, days: number) => {
+    const d = new Date('2026-02-14');
+    d.setDate(d.getDate() + days);
+    dispatch({ type: 'TASK_SNOOZE', payload: { id: taskId, newDate: d.toISOString().split('T')[0] } });
+    toast.success(`Task snoozed ${days} day(s)`);
+  };
 
-    return (
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          {icon}
-          <h2 className="text-lg font-bold">{title}</h2>
-          <Badge variant="outline">{tasks.length}</Badge>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {tasks.map(task => (
-            <TaskCard key={task.id} task={task} />
-          ))}
-        </div>
-      </div>
-    );
+  const handleDelete = (taskId: string) => {
+    dispatch({ type: 'TASK_DELETE', payload: taskId });
+    if (selectedTaskId === taskId) setSelectedTaskId(null);
+    toast.success('Task deleted');
+  };
+
+  const handleBulkMarkDone = () => {
+    dispatch({ type: 'TASK_BULK_MARK_DONE', payload: selectedTasks });
+    toast.success(`${selectedTasks.length} tasks marked as done`);
+    setSelectedTasks([]);
+  };
+
+  const handleBulkDelete = () => {
+    dispatch({ type: 'TASK_BULK_DELETE', payload: selectedTasks });
+    toast.success(`${selectedTasks.length} tasks deleted`);
+    setSelectedTasks([]);
+  };
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTasks(prev => prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]);
+  };
+
+  const stats = {
+    total: state.tasks.length,
+    todo: state.tasks.filter(t => t.status === 'todo').length,
+    inprogress: state.tasks.filter(t => t.status === 'inprogress').length,
+    done: state.tasks.filter(t => t.status === 'done').length,
+    overdue: state.tasks.filter(t => t.overdue).length,
+    blocked: state.tasks.filter(t => t.blocked).length,
   };
 
   return (
-    <div className="p-4 lg:p-8">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Tasks</h1>
-          <p className="text-sm text-neutral-600 mt-1">All tasks across your farm</p>
-        </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Task
-        </Button>
-      </div>
-
-      {/* Filters */}
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-              <Input
-                type="search"
-                placeholder="Search tasks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="todo">To do</SelectItem>
-                <SelectItem value="inprogress">In progress</SelectItem>
-                <SelectItem value="done">Done</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All categories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All categories</SelectItem>
-                {categories.map(cat => (
-                  <SelectItem key={cat} value={cat} className="capitalize">{cat}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+    <div className="pb-8">
+      {/* Header */}
+      <div className="sticky top-16 z-30 bg-white border-b border-neutral-200 px-4 lg:px-8 py-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Tasks</h1>
+            <p className="text-sm text-neutral-600 mt-1">{stats.total} tasks · {stats.overdue} overdue · {stats.blocked} blocked</p>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Task Groups */}
-      <div className="space-y-8">
-        <TaskGroup
-          title="Overdue"
-          tasks={groupedTasks.overdue}
-          icon={<AlertCircle className="h-5 w-5 text-red-600" />}
-        />
-        <TaskGroup
-          title="Today"
-          tasks={groupedTasks.today.filter(t => !t.overdue && t.window !== 'night')}
-          icon={<Calendar className="h-5 w-5 text-blue-600" />}
-        />
-        <TaskGroup
-          title="Tonight"
-          tasks={groupedTasks.tonight.filter(t => !t.overdue)}
-          icon={<Clock className="h-5 w-5 text-indigo-600" />}
-        />
-        <TaskGroup
-          title="Tomorrow"
-          tasks={groupedTasks.tomorrow}
-          icon={<Calendar className="h-5 w-5 text-neutral-600" />}
-        />
-        <TaskGroup
-          title="This Week"
-          tasks={groupedTasks.thisWeek}
-          icon={<Calendar className="h-5 w-5 text-neutral-600" />}
-        />
-        <TaskGroup
-          title="Later"
-          tasks={groupedTasks.later}
-          icon={<Calendar className="h-5 w-5 text-neutral-400" />}
-        />
+          <Button className="bg-green-600 hover:bg-green-700" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />Create Task
+          </Button>
+        </div>
       </div>
 
-      {filteredTasks.length === 0 && (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <CheckCircle2 className="mx-auto h-12 w-12 text-neutral-400 mb-4" />
-            <h3 className="font-semibold text-lg mb-2">No tasks found</h3>
-            <p className="text-sm text-neutral-600 mb-6">
-              Try adjusting your filters or search query
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSearchQuery('');
-                setStatusFilter('all');
-                setCategoryFilter('all');
-              }}
-            >
-              Clear filters
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      <div className="px-4 lg:px-8">
+        {/* Stat chips */}
+        <div className="flex flex-wrap gap-3 mb-6">
+          <Badge variant="outline" className="py-1.5 px-3 cursor-pointer" onClick={() => setStatusFilter('all')}>All ({stats.total})</Badge>
+          <Badge variant="outline" className="py-1.5 px-3 cursor-pointer" onClick={() => setStatusFilter('todo')}>To Do ({stats.todo})</Badge>
+          <Badge variant="outline" className="py-1.5 px-3 cursor-pointer bg-blue-50" onClick={() => setStatusFilter('inprogress')}>In Progress ({stats.inprogress})</Badge>
+          <Badge variant="outline" className="py-1.5 px-3 cursor-pointer bg-green-50" onClick={() => setStatusFilter('done')}>Done ({stats.done})</Badge>
+          <Badge variant="outline" className="py-1.5 px-3 cursor-pointer bg-red-50 text-red-700" onClick={() => setStatusFilter('overdue')}>Overdue ({stats.overdue})</Badge>
+          <Badge variant="outline" className="py-1.5 px-3 cursor-pointer bg-orange-50 text-orange-700" onClick={() => setStatusFilter('blocked')}>Blocked ({stats.blocked})</Badge>
+        </div>
+
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+            <Input placeholder="Search tasks..." value={search} onChange={e => setSearch(e.target.value)} className="pl-10" />
+          </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-40"><Filter className="h-4 w-4 mr-2" /><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="irrigation">Irrigation</SelectItem>
+              <SelectItem value="fertilization">Fertilization</SelectItem>
+              <SelectItem value="spray">Spray</SelectItem>
+              <SelectItem value="scout">Scout</SelectItem>
+              <SelectItem value="harvest">Harvest</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="planting">Planting</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={fieldFilter} onValueChange={setFieldFilter}>
+            <SelectTrigger className="w-44"><SelectValue placeholder="All Fields" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Fields</SelectItem>
+              {uniqueFields.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Bulk actions */}
+        {selectedTasks.length > 0 && (
+          <Card className="mb-6 border-neutral-900 bg-neutral-50">
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between">
+                <p className="font-medium">{selectedTasks.length} selected</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={handleBulkMarkDone}>
+                    <CheckCircle2 className="h-4 w-4 mr-1" />Mark done
+                  </Button>
+                  <Button size="sm" variant="outline" className="text-red-600" onClick={handleBulkDelete}>
+                    <Trash2 className="h-4 w-4 mr-1" />Delete
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSelectedTasks([])}>Clear</Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Task list grouped by date */}
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 text-neutral-500">
+            <Target className="h-12 w-12 mx-auto mb-4 text-neutral-300" />
+            <p className="text-lg font-medium">No tasks match your filters</p>
+            <p className="text-sm mt-2">Try adjusting your search or filter criteria</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {grouped.map(([date, tasks]) => (
+              <div key={date}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="h-4 w-4 text-neutral-500" />
+                  <h3 className="font-semibold text-neutral-700">{date}</h3>
+                  <Badge variant="outline" className="text-xs">{tasks.length}</Badge>
+                </div>
+                <div className="space-y-2">
+                  {tasks.map(task => (
+                    <div
+                      key={task.id}
+                      className={`flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-colors ${task.status === 'done' ? 'bg-green-50 border-green-200 opacity-70' : selectedTasks.includes(task.id) ? 'border-green-600 bg-green-50' : 'border-neutral-200 bg-white hover:border-neutral-300'}`}
+                    >
+                      <Checkbox
+                        checked={selectedTasks.includes(task.id) || task.status === 'done'}
+                        onCheckedChange={() => task.status !== 'done' && toggleTaskSelection(task.id)}
+                        className="h-5 w-5"
+                      />
+                      <div className="flex-1 min-w-0" onClick={() => setSelectedTaskId(task.id)}>
+                        <div className="flex items-center gap-2">
+                          {getCategoryIcon(task.category)}
+                          <span className={`font-medium ${task.status === 'done' ? 'line-through text-neutral-400' : ''}`}>{task.title}</span>
+                        </div>
+                        <p className="text-sm text-neutral-600 mt-0.5">{task.field}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {task.window && <Badge variant="outline" className="text-xs">{task.window}</Badge>}
+                        {getStatusBadge(task.status, task.overdue, task.blocked)}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8"><MoreVertical className="h-4 w-4" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleMarkDone(task.id)}>Mark as done</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleSnooze(task.id, 1)}>Snooze 1 day</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSnooze(task.id, 3)}>Snooze 3 days</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleSnooze(task.id, 7)}>Snooze 1 week</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(task.id)}>Delete</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Task detail drawer */}
+      <Sheet open={!!selectedTask} onOpenChange={() => setSelectedTaskId(null)}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {selectedTask && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  {getCategoryIcon(selectedTask.category)}
+                  {selectedTask.title}
+                </SheetTitle>
+                <SheetDescription>{selectedTask.field}</SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 space-y-6">
+                <div className="flex flex-wrap gap-2">
+                  {getStatusBadge(selectedTask.status, selectedTask.overdue, selectedTask.blocked)}
+                  {selectedTask.window && <Badge variant="outline"><Clock className="h-3 w-3 mr-1" />{selectedTask.window}</Badge>}
+                  <Badge variant="outline"><Calendar className="h-3 w-3 mr-1" />Due: {selectedTask.dueDate}</Badge>
+                  <Badge variant="outline" className="capitalize">{selectedTask.category}</Badge>
+                </div>
+
+                {selectedTask.notes && (
+                  <div>
+                    <h4 className="font-semibold text-sm text-neutral-700 mb-1">Notes</h4>
+                    <p className="text-sm text-neutral-600">{selectedTask.notes}</p>
+                  </div>
+                )}
+
+                {selectedTask.blocked && selectedTask.blockReason && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-red-900">Blocked</h4>
+                        <p className="text-sm text-red-800 mt-1">{selectedTask.blockReason}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {selectedTask.movedReason && (
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                    <h4 className="font-semibold text-blue-900 text-sm">Moved</h4>
+                    <p className="text-sm text-blue-800 mt-1">{selectedTask.movedReason}</p>
+                  </div>
+                )}
+
+                {selectedTask.createdFrom && (
+                  <div className="text-sm text-neutral-600">
+                    <span className="font-medium">Source:</span> {selectedTask.createdFrom}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2 pt-4 border-t">
+                  {selectedTask.status !== 'done' && (
+                    <Button className="bg-green-600 hover:bg-green-700" onClick={() => { handleMarkDone(selectedTask.id); setSelectedTaskId(null); }}>
+                      <CheckCircle2 className="h-4 w-4 mr-2" />Mark as done
+                    </Button>
+                  )}
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1" onClick={() => { handleSnooze(selectedTask.id, 1); setSelectedTaskId(null); }}>
+                      <Clock className="h-4 w-4 mr-2" />Snooze 1 day
+                    </Button>
+                    <Button variant="outline" className="flex-1" onClick={() => { handleSnooze(selectedTask.id, 7); setSelectedTaskId(null); }}>
+                      Snooze 1 week
+                    </Button>
+                  </div>
+                  <Button variant="outline" className="text-red-600" onClick={() => { handleDelete(selectedTask.id); }}>
+                    <Trash2 className="h-4 w-4 mr-2" />Delete task
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <CreateTaskModal open={createOpen} onOpenChange={setCreateOpen} />
     </div>
   );
 }

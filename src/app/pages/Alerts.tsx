@@ -1,282 +1,236 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
 import { Switch } from '../components/ui/switch';
+import { Label } from '../components/ui/label';
+import { Input } from '../components/ui/input';
+import { Separator } from '../components/ui/separator';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../components/ui/select';
-import { Bell, Mail, MessageSquare, Clock, AlertCircle, Database } from 'lucide-react';
+  Bell, Mail, Smartphone, MessageSquare, AlertTriangle, Droplets,
+  Bug, Wind, Clock, Save, RotateCcw, CheckCircle2, Plus, Trash2,
+} from 'lucide-react';
+import { useApp, generateId } from '../store/AppContext';
 import { toast } from 'sonner';
 
 export default function Alerts() {
-  const [smsEnabled, setSmsEnabled] = useState(false);
-  const [emailEnabled, setEmailEnabled] = useState(true);
-  const [overdueEnabled, setOverdueEnabled] = useState(true);
-  const [blockedEnabled, setBlockedEnabled] = useState(true);
-  const [freshnessEnabled, setFreshnessEnabled] = useState(true);
+  const { state, dispatch } = useApp();
+
+  // Map flat store settings to local state
+  const [emailEnabled, setEmailEnabled] = useState(state.alertSettings.emailEnabled);
+  const [smsEnabled, setSmsEnabled] = useState(state.alertSettings.smsEnabled);
+  const [email, setEmail] = useState(state.alertSettings.email);
+  const [phone, setPhone] = useState(state.alertSettings.phone);
+  const [overdueEnabled, setOverdueEnabled] = useState(state.alertSettings.overdueEnabled);
+  const [overdueThreshold, setOverdueThreshold] = useState(state.alertSettings.overdueThreshold);
+  const [blockedEnabled, setBlockedEnabled] = useState(state.alertSettings.blockedEnabled);
+  const [freshnessEnabled, setFreshnessEnabled] = useState(state.alertSettings.freshnessEnabled);
+  const [freshnessThreshold, setFreshnessThreshold] = useState(state.alertSettings.freshnessThreshold);
+  const [quietStart, setQuietStart] = useState(state.alertSettings.quietStart);
+  const [quietEnd, setQuietEnd] = useState(state.alertSettings.quietEnd);
+  const [fieldOverrides, setFieldOverrides] = useState(state.alertSettings.fieldOverrides);
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => { setHasChanges(true); }, [
+    emailEnabled, smsEnabled, email, phone, overdueEnabled, overdueThreshold,
+    blockedEnabled, freshnessEnabled, freshnessThreshold, quietStart, quietEnd, fieldOverrides,
+  ]);
 
   const handleSave = () => {
+    dispatch({
+      type: 'ALERT_SETTINGS_UPDATE',
+      payload: {
+        emailEnabled, smsEnabled, email, phone, overdueEnabled, overdueThreshold,
+        blockedEnabled, freshnessEnabled, freshnessThreshold, quietStart, quietEnd, fieldOverrides,
+      },
+    });
+    setHasChanges(false);
     toast.success('Alert settings saved');
   };
 
+  const handleReset = () => {
+    dispatch({ type: 'ALERT_SETTINGS_RESET' });
+    // Reset local state to defaults
+    setEmailEnabled(true); setSmsEnabled(false); setEmail('manager@aggiedemo.farm');
+    setPhone(''); setOverdueEnabled(true); setOverdueThreshold('1');
+    setBlockedEnabled(true); setFreshnessEnabled(true); setFreshnessThreshold('3');
+    setQuietStart('22:00'); setQuietEnd('07:00');
+    setFieldOverrides([
+      { fieldId: 'field-d', fieldName: 'Field D - Alfalfa', rule: 'Alert on any task overdue' },
+      { fieldId: 'field-e', fieldName: 'Field E - Orchards', rule: 'Alert on weather blocks only' },
+    ]);
+    setHasChanges(false);
+    toast.success('Alert settings reset to defaults');
+  };
+
+  const removeOverride = (fieldId: string) => {
+    setFieldOverrides(prev => prev.filter(o => o.fieldId !== fieldId));
+  };
+
   return (
-    <div className="p-4 lg:p-8 max-w-4xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-neutral-900">Alerts</h1>
-        <p className="text-sm text-neutral-600 mt-1">Configure notifications for critical events</p>
+    <div className="pb-8">
+      <div className="sticky top-16 z-30 bg-white border-b border-neutral-200 px-4 lg:px-8 py-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Alerts & Notifications</h1>
+            <p className="text-sm text-neutral-600 mt-1">Configure how and when you receive alerts</p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" size="sm" onClick={handleReset}><RotateCcw className="h-4 w-4 mr-2" />Reset</Button>
+            <Button className="bg-green-600 hover:bg-green-700" size="sm" onClick={handleSave} disabled={!hasChanges}>
+              <Save className="h-4 w-4 mr-2" />Save Changes
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Notification Channels */}
+      <div className="px-4 lg:px-8 space-y-6">
+        {/* Channels */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
-              Notification Channels
-            </CardTitle>
+            <CardTitle>Notification Channels</CardTitle>
+            <CardDescription>Choose how you want to receive alerts</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Email */}
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3 flex-1">
-                <Mail className="h-5 w-5 text-neutral-600 mt-0.5" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label htmlFor="email-toggle" className="text-base font-semibold cursor-pointer">
-                      Email notifications
-                    </Label>
-                    <Switch
-                      id="email-toggle"
-                      checked={emailEnabled}
-                      onCheckedChange={setEmailEnabled}
-                    />
-                  </div>
-                  {emailEnabled && (
-                    <div className="space-y-2 mt-3">
-                      <Label htmlFor="email-input">Email address</Label>
-                      <Input
-                        id="email-input"
-                        type="email"
-                        placeholder="your@email.com"
-                        defaultValue="manager@aggiedemo.farm"
-                      />
-                    </div>
-                  )}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center"><Mail className="h-5 w-5 text-purple-600" /></div>
+                <div>
+                  <Label className="font-medium">Email notifications</Label>
+                  <p className="text-sm text-neutral-500">Receive alerts via email</p>
                 </div>
               </div>
+              <Switch checked={emailEnabled} onCheckedChange={setEmailEnabled} />
             </div>
-
-            {/* SMS */}
-            <div className="flex items-start justify-between pt-6 border-t">
-              <div className="flex items-start gap-3 flex-1">
-                <MessageSquare className="h-5 w-5 text-neutral-600 mt-0.5" />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <Label htmlFor="sms-toggle" className="text-base font-semibold cursor-pointer">
-                      SMS notifications
-                    </Label>
-                    <Switch
-                      id="sms-toggle"
-                      checked={smsEnabled}
-                      onCheckedChange={setSmsEnabled}
-                    />
-                  </div>
-                  {smsEnabled && (
-                    <div className="space-y-2 mt-3">
-                      <Label htmlFor="phone-input">Phone number</Label>
-                      <Input
-                        id="phone-input"
-                        type="tel"
-                        placeholder="+1 (555) 000-0000"
-                      />
-                      <p className="text-xs text-neutral-500">
-                        Standard SMS rates may apply
-                      </p>
-                    </div>
-                  )}
+            {emailEnabled && (
+              <div className="pl-14">
+                <Label className="text-xs text-neutral-500">Email address</Label>
+                <Input value={email} onChange={e => setEmail(e.target.value)} className="max-w-sm" />
+              </div>
+            )}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center"><Smartphone className="h-5 w-5 text-green-600" /></div>
+                <div>
+                  <Label className="font-medium">SMS notifications</Label>
+                  <p className="text-sm text-neutral-500">Text messages for critical alerts</p>
                 </div>
               </div>
+              <Switch checked={smsEnabled} onCheckedChange={setSmsEnabled} />
             </div>
+            {smsEnabled && (
+              <div className="pl-14">
+                <Label className="text-xs text-neutral-500">Phone number</Label>
+                <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (555) 123-4567" className="max-w-sm" />
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Alert Rules */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5" />
-              Alert Rules
-            </CardTitle>
+            <CardTitle>Alert Rules</CardTitle>
+            <CardDescription>Define what triggers notifications</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Overdue Tasks */}
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <Label htmlFor="overdue-toggle" className="text-base font-semibold cursor-pointer">
-                    Overdue tasks
-                  </Label>
-                  <Switch
-                    id="overdue-toggle"
-                    checked={overdueEnabled}
-                    onCheckedChange={setOverdueEnabled}
-                  />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                <div>
+                  <Label className="font-medium">Overdue task alerts</Label>
+                  <p className="text-sm text-neutral-500">Get notified when tasks pass their due date</p>
                 </div>
-                <p className="text-sm text-neutral-600 mb-3">
-                  Get notified when tasks become overdue
-                </p>
-                {overdueEnabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="overdue-threshold">Threshold</Label>
-                    <Select defaultValue="1">
-                      <SelectTrigger id="overdue-threshold" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 or more overdue tasks</SelectItem>
-                        <SelectItem value="3">3 or more overdue tasks</SelectItem>
-                        <SelectItem value="5">5 or more overdue tasks</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
               </div>
+              <Switch checked={overdueEnabled} onCheckedChange={setOverdueEnabled} />
             </div>
-
-            {/* Blocked Tasks */}
-            <div className="flex items-start justify-between pt-6 border-t">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <Label htmlFor="blocked-toggle" className="text-base font-semibold cursor-pointer">
-                    Blocked tasks
-                  </Label>
-                  <Switch
-                    id="blocked-toggle"
-                    checked={blockedEnabled}
-                    onCheckedChange={setBlockedEnabled}
-                  />
+            {overdueEnabled && (
+              <div className="pl-8 flex items-center gap-2">
+                <Label className="text-sm text-neutral-600">Alert after</Label>
+                <Input type="number" value={overdueThreshold} onChange={e => setOverdueThreshold(e.target.value)} className="w-20" min="1" />
+                <Label className="text-sm text-neutral-600">day(s) overdue</Label>
+              </div>
+            )}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Wind className="h-5 w-5 text-orange-600" />
+                <div>
+                  <Label className="font-medium">Blocked task alerts</Label>
+                  <p className="text-sm text-neutral-500">Get notified when tasks are blocked</p>
                 </div>
-                <p className="text-sm text-neutral-600">
-                  Alert when tasks are blocked by weather or other conditions
-                </p>
               </div>
+              <Switch checked={blockedEnabled} onCheckedChange={setBlockedEnabled} />
             </div>
-
-            {/* Data Freshness */}
-            <div className="flex items-start justify-between pt-6 border-t">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <Label htmlFor="freshness-toggle" className="text-base font-semibold cursor-pointer">
-                    Data freshness
-                  </Label>
-                  <Switch
-                    id="freshness-toggle"
-                    checked={freshnessEnabled}
-                    onCheckedChange={setFreshnessEnabled}
-                  />
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-blue-600" />
+                <div>
+                  <Label className="font-medium">Data freshness alerts</Label>
+                  <p className="text-sm text-neutral-500">Alert when no import received within threshold</p>
                 </div>
-                <p className="text-sm text-neutral-600 mb-3">
-                  Remind when it's been a while since your last import
-                </p>
-                {freshnessEnabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="freshness-threshold">No import in</Label>
-                    <Select defaultValue="3">
-                      <SelectTrigger id="freshness-threshold" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 day</SelectItem>
-                        <SelectItem value="2">2 days</SelectItem>
-                        <SelectItem value="3">3 days</SelectItem>
-                        <SelectItem value="7">7 days</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
               </div>
+              <Switch checked={freshnessEnabled} onCheckedChange={setFreshnessEnabled} />
             </div>
+            {freshnessEnabled && (
+              <div className="pl-8 flex items-center gap-2">
+                <Label className="text-sm text-neutral-600">Alert after</Label>
+                <Input type="number" value={freshnessThreshold} onChange={e => setFreshnessThreshold(e.target.value)} className="w-20" min="1" />
+                <Label className="text-sm text-neutral-600">day(s) without import</Label>
+              </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Quiet Hours */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
-              Quiet Hours
-            </CardTitle>
+            <CardTitle>Quiet Hours</CardTitle>
+            <CardDescription>Pause non-critical notifications during off hours</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-neutral-600 mb-4">
-              Don't send notifications during these hours
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="quiet-start">Start time</Label>
-                <Input
-                  id="quiet-start"
-                  type="time"
-                  defaultValue="22:00"
-                />
+            <div className="flex items-center gap-4">
+              <div>
+                <Label className="text-xs text-neutral-500">From</Label>
+                <Input type="time" value={quietStart} onChange={e => setQuietStart(e.target.value)} className="w-32" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="quiet-end">End time</Label>
-                <Input
-                  id="quiet-end"
-                  type="time"
-                  defaultValue="07:00"
-                />
+              <span className="text-neutral-400 mt-5">to</span>
+              <div>
+                <Label className="text-xs text-neutral-500">Until</Label>
+                <Input type="time" value={quietEnd} onChange={e => setQuietEnd(e.target.value)} className="w-32" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Per-Field Overrides */}
+        {/* Field Overrides */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Per-Field Overrides
-            </CardTitle>
+            <CardTitle>Field-Specific Rules</CardTitle>
+            <CardDescription>Custom alert rules for individual fields</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-neutral-600 mb-4">
-              Configure custom alert rules for specific fields
-            </p>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between rounded-lg border border-neutral-200 p-3">
-                <div>
-                  <div className="font-medium">Field D - Alfalfa</div>
-                  <div className="text-sm text-neutral-600">Alert on any task overdue</div>
-                </div>
-                <Button variant="ghost" size="sm">Edit</Button>
+            {fieldOverrides.length === 0 ? (
+              <p className="text-sm text-neutral-500 text-center py-4">No field-specific rules configured</p>
+            ) : (
+              <div className="space-y-3">
+                {fieldOverrides.map(o => (
+                  <div key={o.fieldId} className="flex items-center justify-between rounded-lg border p-3">
+                    <div>
+                      <p className="font-medium text-sm">{o.fieldName}</p>
+                      <p className="text-xs text-neutral-500">{o.rule}</p>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-neutral-400 hover:text-red-600" onClick={() => removeOverride(o.fieldId)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center justify-between rounded-lg border border-neutral-200 p-3">
-                <div>
-                  <div className="font-medium">Field E - Orchards</div>
-                  <div className="text-sm text-neutral-600">Alert on weather blocks only</div>
-                </div>
-                <Button variant="ghost" size="sm">Edit</Button>
-              </div>
-            </div>
-            <Button variant="outline" className="w-full mt-4">
-              Add field override
-            </Button>
+            )}
           </CardContent>
         </Card>
-
-        {/* Save Button */}
-        <div className="flex justify-end gap-3">
-          <Button variant="outline">Reset to defaults</Button>
-          <Button onClick={handleSave}>Save settings</Button>
-        </div>
       </div>
     </div>
   );

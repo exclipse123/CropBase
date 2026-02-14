@@ -1,124 +1,139 @@
+import { useState } from 'react';
 import { Button } from '../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { FileBarChart, Download, Sparkles, Calendar, AlertTriangle, FileText } from 'lucide-react';
+import {
+  BarChart3, TrendingUp, Droplets, Bug, Calendar, Download, Loader2, FileText,
+} from 'lucide-react';
+import { useApp } from '../store/AppContext';
+import { toast } from 'sonner';
 
 export default function Reports() {
+  const { state, exportCSV } = useApp();
+  const [generating, setGenerating] = useState<string | null>(null);
+
+  const handleGenerate = (reportType: string, reportName: string) => {
+    setGenerating(reportType);
+    setTimeout(() => {
+      let data: Record<string, unknown>[] = [];
+      switch (reportType) {
+        case 'weekly':
+          data = state.tasks.map(t => ({
+            Task: t.title, Field: t.field, Category: t.category,
+            'Due Date': t.dueDate, Status: t.status, Priority: t.priority,
+            Overdue: t.overdue ? 'Yes' : 'No', Blocked: t.blocked ? 'Yes' : 'No',
+          }));
+          break;
+        case 'irrigation':
+          data = state.fields.map(f => ({
+            Field: f.name, Crop: f.crop, 'Acreage (ac)': f.acreage,
+            Irrigation: f.irrigationType, Status: f.status,
+            'Irrigation Tasks': state.tasks.filter(t => t.fieldId === f.id && t.category === 'irrigation').length,
+          }));
+          break;
+        case 'pest':
+          data = state.fields.map(f => ({
+            Field: f.name, Crop: f.crop, Status: f.status,
+            'Spray Tasks': state.tasks.filter(t => t.fieldId === f.id && t.category === 'spray').length,
+            'Scout Tasks': state.tasks.filter(t => t.fieldId === f.id && t.category === 'scout').length,
+            'Active Issues': state.tasks.filter(t => t.fieldId === f.id && (t.category === 'spray' || t.category === 'scout') && t.status !== 'done').length,
+          }));
+          break;
+        case 'season':
+          data = [
+            { Metric: 'Total Fields', Value: state.fields.length },
+            { Metric: 'Total Acreage', Value: state.fields.reduce((s, f) => s + f.acreage, 0) },
+            { Metric: 'Total Tasks', Value: state.tasks.length },
+            { Metric: 'Tasks Completed', Value: state.tasks.filter(t => t.status === 'done').length },
+            { Metric: 'Tasks Overdue', Value: state.tasks.filter(t => t.overdue).length },
+            { Metric: 'Tasks Blocked', Value: state.tasks.filter(t => t.blocked).length },
+            { Metric: 'Total Imports', Value: state.imports.length },
+            { Metric: 'Total Notes', Value: state.notes.length },
+          ];
+          break;
+      }
+      exportCSV(data, `cropbase-${reportType}-report.csv`);
+      setGenerating(null);
+      toast.success(`${reportName} generated and downloaded`);
+    }, 1500);
+  };
+
   const reports = [
     {
-      id: 'weekly-ops',
-      title: 'Weekly Ops Plan',
-      description: 'Complete operational plan for the next 7 days, grouped by field and priority',
-      icon: Calendar,
-      lastGenerated: '2026-02-14T08:00:00',
-      formats: ['PDF', 'CSV']
+      id: 'weekly', title: 'Weekly Operations Report',
+      description: 'Summary of all tasks, completions, and blockers for the week.',
+      icon: <BarChart3 className="h-8 w-8 text-blue-600" />,
+      badge: 'Popular', badgeColor: 'bg-blue-100 text-blue-700',
+      dataPoints: `${state.tasks.length} tasks · ${state.fields.length} fields`,
     },
     {
-      id: 'field-status',
-      title: 'Field Status Summary',
-      description: 'Current status of all fields including crop stages, irrigation, and active tasks',
-      icon: FileText,
-      lastGenerated: '2026-02-14T05:00:00',
-      formats: ['CSV', 'Excel']
+      id: 'irrigation', title: 'Irrigation Summary',
+      description: 'Irrigation status across all fields and upcoming schedules.',
+      icon: <Droplets className="h-8 w-8 text-cyan-600" />,
+      badge: 'Updated', badgeColor: 'bg-cyan-100 text-cyan-700',
+      dataPoints: `${state.tasks.filter(t => t.category === 'irrigation').length} irrigation tasks`,
     },
     {
-      id: 'work-log',
-      title: 'Work Log Export',
-      description: 'Complete history of all tasks, status changes, and field notes',
-      icon: FileBarChart,
-      lastGenerated: '2026-02-13T18:00:00',
-      formats: ['CSV', 'Excel']
+      id: 'pest', title: 'Pest & Disease Report',
+      description: 'Current pest pressure, spray schedules, and scouting results.',
+      icon: <Bug className="h-8 w-8 text-red-600" />,
+      badge: null, badgeColor: '',
+      dataPoints: `${state.tasks.filter(t => t.category === 'spray' || t.category === 'scout').length} pest-related tasks`,
     },
     {
-      id: 'exceptions',
-      title: 'Exceptions Report',
-      description: 'What changed and why: overdue tasks, blocked operations, and schedule changes',
-      icon: AlertTriangle,
-      lastGenerated: 'Never',
-      formats: ['PDF', 'CSV']
+      id: 'season', title: 'Season Overview',
+      description: 'High-level summary: task completion rates, import history, and trends.',
+      icon: <TrendingUp className="h-8 w-8 text-green-600" />,
+      badge: 'New', badgeColor: 'bg-green-100 text-green-700',
+      dataPoints: `${state.tasks.filter(t => t.status === 'done').length}/${state.tasks.length} tasks completed`,
     },
   ];
 
-  const formatDate = (dateString: string) => {
-    if (dateString === 'Never') return 'Never';
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    });
-  };
-
   return (
-    <div className="p-4 lg:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-neutral-900">Reports</h1>
-        <p className="text-sm text-neutral-600 mt-1">Generate and export operational reports</p>
+    <div className="pb-8">
+      <div className="sticky top-16 z-30 bg-white border-b border-neutral-200 px-4 lg:px-8 py-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Reports</h1>
+            <p className="text-sm text-neutral-600 mt-1">Generate and download farm operation reports</p>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-neutral-500">
+            <Calendar className="h-4 w-4" />
+            <span>Data as of {new Date().toLocaleDateString()}</span>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        {reports.map((report) => {
-          const Icon = report.icon;
-          return (
-            <Card key={report.id} className="hover:shadow-md transition-shadow">
+      <div className="px-4 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {reports.map(report => (
+            <Card key={report.id} className="hover:border-neutral-300 transition-colors">
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-neutral-100">
-                      <Icon className="h-5 w-5 text-neutral-700" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">{report.title}</CardTitle>
-                      <p className="text-sm text-neutral-600 mt-1">{report.description}</p>
-                    </div>
-                  </div>
+                  <div className="h-14 w-14 rounded-xl bg-neutral-50 flex items-center justify-center">{report.icon}</div>
+                  {report.badge && <Badge className={report.badgeColor}>{report.badge}</Badge>}
                 </div>
+                <CardTitle className="mt-4">{report.title}</CardTitle>
+                <CardDescription>{report.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-sm">
-                    <span className="text-neutral-600">Last generated:</span>{' '}
-                    <span className="font-medium">{formatDate(report.lastGenerated)}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 mb-4">
-                  {report.formats.map(format => (
-                    <Badge key={format} variant="outline" className="text-xs">
-                      {format}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1">
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    Generate
-                  </Button>
-                  <Button variant="outline" className="flex-1">
-                    <Download className="mr-2 h-4 w-4" />
-                    Export
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-neutral-500">{report.dataPoints}</p>
+                  <Button className="bg-green-600 hover:bg-green-700" size="sm" disabled={generating === report.id} onClick={() => handleGenerate(report.id, report.title)}>
+                    {generating === report.id ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generating...</> : <><Download className="h-4 w-4 mr-2" />Generate</>}
                   </Button>
                 </div>
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
+          ))}
+        </div>
 
-      {/* Info */}
-      <Card className="mt-8 border-blue-200 bg-blue-50">
-        <CardContent className="pt-6">
-          <div className="flex gap-3">
-            <FileBarChart className="h-5 w-5 text-blue-700 flex-shrink-0 mt-0.5" />
-            <div>
-              <h3 className="font-semibold text-blue-900 mb-1">Export anytime</h3>
-              <p className="text-sm text-blue-800">
-                All reports can be exported to CSV or Excel format. Keep your spreadsheet workflow and use Cropbase for coordination and visibility.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="mt-8 rounded-lg border border-dashed border-neutral-300 p-6 text-center">
+          <FileText className="h-10 w-10 mx-auto mb-3 text-neutral-300" />
+          <p className="font-medium text-neutral-700">Reports are downloaded as CSV files</p>
+          <p className="text-sm text-neutral-500 mt-1">Click Generate to create a report from your current farm data.</p>
+        </div>
+      </div>
     </div>
   );
 }

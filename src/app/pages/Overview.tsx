@@ -26,19 +26,20 @@ import {
   TrendingUp,
   CheckCircle2
 } from 'lucide-react';
-import { demoFields, demoTasks, demoChanges, getFarmStats, getFieldsNeedingAttention } from '../data/mockData';
 import { ExportModal } from '../components/ExportModal';
 import { CreateTaskModal } from '../components/CreateTaskModal';
+import { useApp } from '../store/AppContext';
+import { toast } from 'sonner';
 
 export default function Overview() {
+  const { state, dispatch, getFarmStats, getFieldsNeedingAttention } = useApp();
   const stats = getFarmStats();
   const fieldsNeedingAttention = getFieldsNeedingAttention();
-  const todayTasks = demoTasks.filter(t => t.dueDate === '2026-02-14' && t.status !== 'done').slice(0, 10);
-  const recentChanges = demoChanges.slice(0, 5);
+  const todayTasks = state.tasks.filter(t => t.dueDate === '2026-02-14' && t.status !== 'done').slice(0, 10);
+  const recentChanges = state.changes.slice(0, 5);
   
   const [exportModalOpen, setExportModalOpen] = useState(false);
   const [createTaskModalOpen, setCreateTaskModalOpen] = useState(false);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -66,15 +67,18 @@ export default function Overview() {
     }
   };
 
+  const handleGenerateBriefing = () => {
+    toast.success('Daily briefing generated', { description: 'AI-powered summary is ready (placeholder).' });
+  };
+
   return (
     <div className="p-4 lg:p-8">
       <div className="mb-6">
-        <h1>Overview</h1>
-        <p className="text-sm text-neutral-600 mt-1">Command center for Aggie Demo Farm</p>
+        <h1 className="text-2xl font-bold">Overview</h1>
+        <p className="text-sm text-neutral-600 mt-1">Command center for {state.farmSettings.farmName}</p>
       </div>
 
-      {/* Onboarding Checklist */}
-      {!onboardingDismissed && (
+      {!state.onboardingDismissed && (
         <Card className="mb-6 border-green-200 bg-green-50">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -82,11 +86,7 @@ export default function Overview() {
                 <CheckCircle2 className="h-5 w-5" />
                 Getting Started
               </CardTitle>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => setOnboardingDismissed(true)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => dispatch({ type: 'ONBOARDING_DISMISS' })}>
                 Dismiss
               </Button>
             </div>
@@ -111,6 +111,9 @@ export default function Overview() {
               <div className="flex items-center gap-3">
                 <Checkbox />
                 <span className="text-sm text-green-900">Export data as CSV</span>
+                <Button variant="link" size="sm" className="ml-auto px-0 text-green-700" onClick={() => setExportModalOpen(true)}>
+                  Export now →
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -119,79 +122,86 @@ export default function Overview() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-600">Active Fields</p>
-                <p className="text-3xl font-bold mt-1">{stats.activeFields}</p>
+        <Link to="/app/fields">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-neutral-600">Active Fields</p>
+                  <p className="text-3xl font-bold mt-1">{stats.activeFields}</p>
+                </div>
+                <MapPin className="h-8 w-8 text-neutral-400" />
               </div>
-              <MapPin className="h-8 w-8 text-neutral-400" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-600">Tasks Due (24h)</p>
-                <p className="text-3xl font-bold mt-1">{stats.tasksDue24h}</p>
+        <Link to="/app/today">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-neutral-600">Tasks Due (24h)</p>
+                  <p className="text-3xl font-bold mt-1">{stats.tasksDue24h}</p>
+                </div>
+                <Clock className="h-8 w-8 text-blue-500" />
               </div>
-              <Clock className="h-8 w-8 text-blue-500" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-600">Overdue Tasks</p>
-                <p className="text-3xl font-bold mt-1 text-red-600">{stats.overdueTasks}</p>
+        <Link to="/app/tasks">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-neutral-600">Overdue Tasks</p>
+                  <p className="text-3xl font-bold mt-1 text-red-600">{stats.overdueTasks}</p>
+                </div>
+                <AlertCircle className="h-8 w-8 text-red-500" />
               </div>
-              <AlertCircle className="h-8 w-8 text-red-500" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-neutral-600">Blocked Tasks</p>
-                <p className="text-3xl font-bold mt-1 text-orange-600">{stats.blockedTasks}</p>
+        <Link to="/app/tasks">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-neutral-600">Blocked Tasks</p>
+                  <p className="text-3xl font-bold mt-1 text-orange-600">{stats.blockedTasks}</p>
+                </div>
+                <Wind className="h-8 w-8 text-orange-500" />
               </div>
-              <Wind className="h-8 w-8 text-orange-500" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="cursor-pointer hover:shadow-md transition-shadow border-green-200 bg-green-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-700">Data Freshness</p>
-                <p className="text-sm font-semibold mt-1 text-green-900">2 hours ago</p>
+        <Link to="/app/imports">
+          <Card className="cursor-pointer hover:shadow-md transition-shadow border-green-200 bg-green-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-green-700">Data Freshness</p>
+                  <p className="text-sm font-semibold mt-1 text-green-900">
+                    {state.imports.length > 0 ? `Last: ${new Date(state.lastImportTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : 'No imports'}
+                  </p>
+                </div>
+                <CheckSquare className="h-8 w-8 text-green-600" />
               </div>
-              <CheckSquare className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
-        {/* Left Column - 2/3 width */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Fields at a Glance */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Fields at a glance</CardTitle>
               <Button variant="outline" size="sm" asChild>
-                <Link to="/app/fields">
-                  View all
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Link>
+                <Link to="/app/fields">View all<ChevronRight className="ml-1 h-4 w-4" /></Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -209,25 +219,19 @@ export default function Overview() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {demoFields.map((field) => (
+                    {state.fields.map((field) => (
                       <TableRow key={field.id} className="cursor-pointer hover:bg-neutral-50">
                         <TableCell className="font-medium">
-                          <Link to={`/app/fields/${field.id}`} className="hover:underline">
-                            {field.name}
-                          </Link>
+                          <Link to={`/app/fields/${field.id}`} className="hover:underline">{field.name}</Link>
                         </TableCell>
                         <TableCell>{field.crop}</TableCell>
                         <TableCell className="text-sm text-neutral-600">{field.stage}</TableCell>
-                        <TableCell className="text-sm">{field.nextTask}</TableCell>
+                        <TableCell className="text-sm">{field.nextTask || '-'}</TableCell>
                         <TableCell className="text-sm">
                           {field.nextTaskDue ? new Date(field.nextTaskDue).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                         </TableCell>
                         <TableCell className="text-center">
-                          {field.overdueCount > 0 ? (
-                            <Badge variant="destructive" className="px-2">{field.overdueCount}</Badge>
-                          ) : (
-                            <span className="text-neutral-400">-</span>
-                          )}
+                          {field.overdueCount > 0 ? <Badge variant="destructive" className="px-2">{field.overdueCount}</Badge> : <span className="text-neutral-400">-</span>}
                         </TableCell>
                         <TableCell>{getStatusBadge(field.status)}</TableCell>
                       </TableRow>
@@ -238,43 +242,37 @@ export default function Overview() {
             </CardContent>
           </Card>
 
-          {/* Needs Attention */}
-          <Card className="border-orange-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-600" />
-                Needs attention
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {fieldsNeedingAttention.map((item, index) => (
-                  <div key={index} className="flex items-start gap-3 rounded-lg border border-orange-100 bg-orange-50 p-4">
-                    <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
-                    <div className="flex-1">
-                      <Link 
-                        to={`/app/fields/${item.field.id}`}
-                        className="font-semibold hover:underline"
-                      >
-                        {item.field.name} - {item.field.crop}
-                      </Link>
-                      <p className="text-sm text-neutral-700 mt-1">{item.reason}</p>
+          {fieldsNeedingAttention.length > 0 && (
+            <Card className="border-orange-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertCircle className="h-5 w-5 text-orange-600" />
+                  Needs attention
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {fieldsNeedingAttention.map((item, index) => (
+                    <div key={index} className="flex items-start gap-3 rounded-lg border border-orange-100 bg-orange-50 p-4">
+                      <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
+                      <div className="flex-1">
+                        <Link to={`/app/fields/${item.field.id}`} className="font-semibold hover:underline">
+                          {item.field.name} - {item.field.crop}
+                        </Link>
+                        <p className="text-sm text-neutral-700 mt-1">{item.reason}</p>
+                      </div>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link to={`/app/fields/${item.field.id}`}>View</Link>
+                      </Button>
                     </div>
-                    <Button size="sm" variant="outline" asChild>
-                      <Link to={`/app/fields/${item.field.id}`}>
-                        View
-                      </Link>
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* Right Column - 1/3 width */}
         <div className="space-y-6">
-          {/* What Changed */}
           <Card className="border-blue-200">
             <CardHeader>
               <CardTitle className="text-base">What changed since last update</CardTitle>
@@ -294,51 +292,42 @@ export default function Overview() {
                     </div>
                   </div>
                 ))}
+                {recentChanges.length === 0 && (
+                  <p className="text-sm text-neutral-500">No recent changes</p>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Today Plan Preview */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Today Plan</CardTitle>
               <Button variant="link" size="sm" asChild className="px-0">
-                <Link to="/app/today">
-                  View all
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Link>
+                <Link to="/app/today">View all<ChevronRight className="ml-1 h-4 w-4" /></Link>
               </Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {todayTasks.slice(0, 8).map((task) => (
                   <div key={task.id} className="flex items-start gap-3 rounded-lg border border-neutral-200 bg-white p-3 hover:border-neutral-300 transition-colors">
-                    <div className="mt-0.5">
-                      {getCategoryIcon(task.category)}
-                    </div>
+                    <div className="mt-0.5">{getCategoryIcon(task.category)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{task.title}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs text-neutral-600">{task.field}</p>
-                        {task.window && (
-                          <Badge variant="outline" className="text-xs px-1.5 py-0">
-                            {task.window}
-                          </Badge>
-                        )}
-                        {task.blocked && (
-                          <Badge variant="destructive" className="text-xs px-1.5 py-0">
-                            Blocked
-                          </Badge>
-                        )}
+                        {task.window && <Badge variant="outline" className="text-xs px-1.5 py-0">{task.window}</Badge>}
+                        {task.blocked && <Badge variant="destructive" className="text-xs px-1.5 py-0">Blocked</Badge>}
                       </div>
                     </div>
                   </div>
                 ))}
+                {todayTasks.length === 0 && (
+                  <p className="text-sm text-neutral-500 text-center py-4">All tasks done for today! 🎉</p>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Daily Briefing */}
           <Card className="border-purple-200 bg-purple-50">
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
@@ -347,22 +336,17 @@ export default function Overview() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-neutral-700 mb-4">
-                AI-powered summary of priorities, risks, and recommendations.
-              </p>
-              <Button className="w-full" variant="outline">
+              <p className="text-sm text-neutral-700 mb-4">AI-powered summary of priorities, risks, and recommendations.</p>
+              <Button className="w-full" variant="outline" onClick={handleGenerateBriefing}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 Generate Briefing
               </Button>
-              <p className="text-xs text-neutral-500 text-center mt-2">
-                Last generated: Never
-              </p>
+              <p className="text-xs text-neutral-500 text-center mt-2">Powered by Cropbase AI</p>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Primary Actions */}
       <div className="mt-8 flex flex-wrap gap-3">
         <Button onClick={() => setCreateTaskModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -370,15 +354,10 @@ export default function Overview() {
         </Button>
         <Button variant="outline" onClick={() => setExportModalOpen(true)}>
           <Download className="mr-2 h-4 w-4" />
-          Export Today Plan to CSV
-        </Button>
-        <Button variant="outline">
-          <Sparkles className="mr-2 h-4 w-4" />
-          Generate Daily Briefing
+          Export Data
         </Button>
       </div>
 
-      {/* Modals */}
       <ExportModal open={exportModalOpen} onOpenChange={setExportModalOpen} />
       <CreateTaskModal open={createTaskModalOpen} onOpenChange={setCreateTaskModalOpen} />
     </div>
