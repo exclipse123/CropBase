@@ -1,4 +1,4 @@
-# Cropbase - Farm Operations Dashboard
+# Introducing Cropbase - A Farm Operations Dashboard
 
 A high-fidelity, responsive web application dashboard that converts farm spreadsheets into a live operational command center.
 
